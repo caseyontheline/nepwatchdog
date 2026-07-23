@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heater Watchdog</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1><span class="logo-badge">NEP</span> Heater Watchdog</h1>
+    <div class="conn">
+      <span id="weather" class="badge">weather –</span>
+      <span id="mode" class="badge">–</span>
+      <span id="link" class="badge link-down">connecting…</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="controllers" class="grid grid-temps"></section>
+
+    <section id="cameras" class="grid grid-cams"></section>
+
+    <section class="panel" id="history-panel">
+      <div class="panel-head">
+        <h2>Temperature History</h2>
+        <div class="chart-legend" id="chart-legend"></div>
+        <div class="range-tabs" id="range-tabs">
+          <button data-hours="1">1H</button>
+          <button data-hours="6" class="active">6H</button>
+          <button data-hours="24">24H</button>
+        </div>
+      </div>
+      <div id="chart"></div>
+    </section>
+
+    <section class="panel" id="alerts-panel">
+      <div class="panel-head"><h2>Alerts</h2></div>
+      <ul id="alerts-list"><li class="alert-empty">No alerts yet.</li></ul>
+    </section>
+
+    <section class="reset-bar">
+      <button id="reset-btn" class="reset">Reset Heater</button>
+      <span id="reset-status" class="reset-status"></span>
+    </section>
+  </main>
+
+  <!-- Confirm dialog for the reset action -->
+  <dialog id="confirm">
+    <form method="dialog">
+      <h2>Reset the heater?</h2>
+      <p>This will pulse the reset relay on the controller. Only do this if you
+         intend to restart the heater.</p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button value="confirm" class="reset">Yes, reset</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# MediaMTX config for Heater Watchdog.
+# Pulls the three Hikvision RTSP streams and re-serves them as low-latency
+# WebRTC (WHEP) that the browser dashboard embeds directly.
+#
+# Install on the Pi 5:
+#   1. Download MediaMTX for arm64 from github.com/bluenviron/mediamtx/releases
+#   2. Put this file next to the binary as mediamtx.yml
+#   3. Run: ./mediamtx mediamtx.yml
+#
+# The WebRTC endpoint defaults to :8889 — matches MEDIAMTX_BASE in .env.
+#
+# Hikvision RTSP URL format (main stream, channel 1):
+#   rtsp://USER:PASS@CAM_IP:554/Streaming/Channels/101
+# Sub stream (lower res, lighter for the Pi/YOLO): .../Channels/102
+
+webrtcAddress: :8889
+webrtcAllowOrigin: '*'
+
+paths:
+  cam1:  # Burner
+    source: rtsp://USER:PASS@192.168.1.101:554/Streaming/Channels/101
+    sourceOnDemand: yes
+  cam2:  # Tank
+    source: rtsp://USER:PASS@192.168.1.102:554/Streaming/Channels/101
+    sourceOnDemand: yes
+  cam3:  # Belt
+    source: rtsp://USER:PASS@192.168.1.103:554/Streaming/Channels/101
+    sourceOnDemand: yes

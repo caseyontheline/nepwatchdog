@@ -1,0 +1,10 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+# --- Real hardware only (install on the Pi) ---
+# pymodbus==3.6.9              # talk to the Siemens LOGO! 8.3 over Modbus TCP
+#                               (used for BOTH temperature reads and the reset command)
+# --- YOLO vision (install on the Pi 5) ---
+# ultralytics==8.2.0          # YOLO object detection
+# opencv-python-headless==4.10.0.84   # RTSP frame capture (headless = no GUI libs)
+# The model file (e.g. yolov8n.pt) is downloaded by ultralytics on first run.
+# Weather uses the stdlib (urllib) against the Ambient Weather cloud API.
