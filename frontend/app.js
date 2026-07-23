@@ -327,10 +327,96 @@ function prependAlert(a) {
 }
 
 // ---------------------------------------------------------------------------
+// Demo mode — used only when there is no backend to talk to (e.g. the static
+// Vercel preview). It renders the full UI from synthetic data so the dashboard
+// is viewable without the Pi. It never runs when the backend responds.
+// ---------------------------------------------------------------------------
+const DEMO_CONFIG = {
+  hardware_mode: "mock",
+  vision_enabled: true,
+  weather_enabled: true,
+  thresholds: { warn_f: 375, crit_f: 425 },
+  cameras: [
+    { id: "cam-1", name: "Burner", webrtc: "" },
+    { id: "cam-2", name: "Tank", webrtc: "" },
+    { id: "cam-3", name: "Belt", webrtc: "" },
+  ],
+};
+const ZONE_META = [
+  { id: "ctrl-1", name: "Heater Zone 1" },
+  { id: "ctrl-2", name: "Heater Zone 2" },
+];
+
+function demoReadings(t) {
+  return ZONE_META.map((z, i) => {
+    const temp = 400 + 9 * Math.sin(t / 12 + i * 2) + (Math.random() - 0.5) * 3;
+    const status = temp >= 425 ? "critical" : temp >= 375 ? "warn" : "ok";
+    return { controller_id: z.id, name: z.name, temp_f: temp, setpoint_f: 400, online: true, status };
+  });
+}
+
+function startDemo() {
+  el("mode").textContent = "demo";
+  setLink(true); el("link").textContent = "demo";
+  renderCameras(DEMO_CONFIG.cameras);
+  wireReset();
+  wireRangeTabs();
+
+  // Seed 6h of synthetic history.
+  const now = Date.now() / 1000, span = 6 * 3600, n = 120;
+  const zones = ZONE_META.map((z, i) => ({
+    id: z.id, name: z.name,
+    points: Array.from({ length: n }, (_, k) => {
+      const ts = now - span + (k / (n - 1)) * span;
+      return { ts, temp_f: 400 + 9 * Math.sin(k / 6 + i * 2) + (Math.random() - 0.5) * 4, online: true };
+    }),
+  }));
+  const histData = { hours: 6, zones, thresholds: DEMO_CONFIG.thresholds };
+  window.__demoHist = histData;
+  drawChart(histData);
+
+  // Seed alerts.
+  [
+    { ts: now - 120, severity: "warning", message: "Person detected on Burner camera (86%)" },
+    { ts: now - 300, severity: "info", message: "Heater reset commanded via LOGO!" },
+    { ts: now - 900, severity: "critical", message: "Heater Zone 2 entered CRITICAL at 431°F" },
+    { ts: now - 1100, severity: "info", message: "Heater Zone 2 cooled to WARN (398°F)" },
+  ].forEach((a) => prependAlert(a));
+
+  // Live tick.
+  let t = 0;
+  setInterval(() => {
+    t += 1;
+    renderReadings(demoReadings(t));
+    renderWeather({ online: true, raining: false, wind_mph: 6 });
+    const person = (t % 12) < 7;
+    renderDetections({
+      "cam-1": person ? [{ cls: "person", conf: 0.86, x: 0.15 + 0.5 * (0.5 + 0.5 * Math.sin(t / 2)), y: 0.45, w: 0.14, h: 0.4 }] : [],
+      "cam-2": [{ cls: "truck", conf: 0.72, x: 0.3, y: 0.35, w: 0.4, h: 0.45 }],
+      "cam-3": [],
+    });
+  }, 2000);
+}
+
+// In demo mode the chart range tabs regenerate from the seeded history.
+const _origLoadHistory = loadHistory;
+loadHistory = async function (hours) {
+  if (window.__demoHist) { currentHours = hours; drawChart(window.__demoHist); return; }
+  return _origLoadHistory(hours);
+};
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 async function boot() {
-  appConfig = await (await fetch("/api/config")).json();
+  try {
+    appConfig = await (await fetch("/api/config")).json();
+  } catch (e) {
+    // No backend reachable → static preview. Run the self-contained demo.
+    appConfig = DEMO_CONFIG;
+    startDemo();
+    return;
+  }
   el("mode").textContent = appConfig.hardware_mode === "real" ? "live hw" : "mock hw";
   renderCameras(appConfig.cameras);
   wireReset();
