@@ -51,7 +51,7 @@ def _emit_alert(alert: dict) -> None:
     _notify(alert)
 
 
-alert_engine = AlertEngine(_emit_alert)
+alert_engine = AlertEngine(_emit_alert, high_f=cfg.TEMP_EMAIL_HIGH_F, low_f=cfg.TEMP_EMAIL_LOW_F)
 
 # --- Vision (YOLO) ----------------------------------------------------------
 vision_engine = VisionEngine(cfg.CAMERAS, cfg, _emit_alert)
@@ -63,12 +63,27 @@ _reset_lock = asyncio.Lock()
 _last_reset_ts: float = 0.0
 
 
+# Two-sided guardrails: safe inside [LOW, HIGH], warn within the margin of a
+# bound, critical at/beyond it. Derived from the email guardrails so the UI and
+# the alert emails always agree.
+_CRIT_HIGH_F = cfg.TEMP_EMAIL_HIGH_F
+_CRIT_LOW_F = cfg.TEMP_EMAIL_LOW_F
+_WARN_HIGH_F = _CRIT_HIGH_F - cfg.TEMP_WARN_MARGIN_F
+_WARN_LOW_F = _CRIT_LOW_F + cfg.TEMP_WARN_MARGIN_F
+_THRESHOLDS = {
+    "warn_low_f": _WARN_LOW_F,
+    "warn_high_f": _WARN_HIGH_F,
+    "crit_low_f": _CRIT_LOW_F,
+    "crit_high_f": _CRIT_HIGH_F,
+}
+
+
 def _classify(temp_f: float, online: bool) -> str:
     if not online:
         return "offline"
-    if temp_f >= cfg.TEMP_CRIT_F:
+    if temp_f >= _CRIT_HIGH_F or temp_f <= _CRIT_LOW_F:
         return "critical"
-    if temp_f >= cfg.TEMP_WARN_F:
+    if temp_f >= _WARN_HIGH_F or temp_f <= _WARN_LOW_F:
         return "warn"
     return "ok"
 
@@ -151,7 +166,7 @@ async def get_config() -> JSONResponse:
                 {"id": c["id"], "name": c["name"], "webrtc": f"{cfg.MEDIAMTX_BASE}/{c['path']}"}
                 for c in cfg.CAMERAS
             ],
-            "thresholds": {"warn_f": cfg.TEMP_WARN_F, "crit_f": cfg.TEMP_CRIT_F},
+            "thresholds": _THRESHOLDS,
             "hardware_mode": cfg.HARDWARE_MODE,
             "poll_interval_sec": cfg.POLL_INTERVAL_SEC,
             "weather_enabled": cfg.WEATHER_ENABLED,
@@ -185,7 +200,7 @@ async def get_history(hours: float = 6.0) -> JSONResponse:
                 {"id": zid, "name": names.get(zid, zid), "points": pts}
                 for zid, pts in series.items()
             ],
-            "thresholds": {"warn_f": cfg.TEMP_WARN_F, "crit_f": cfg.TEMP_CRIT_F},
+            "thresholds": _THRESHOLDS,
         }
     )
 

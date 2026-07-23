@@ -66,9 +66,14 @@ SETPOINT_F = _get_int("SETPOINT_F", 400)
 # How often (seconds) the backend polls the LOGO!.
 POLL_INTERVAL_SEC = _get_int("POLL_INTERVAL_SEC", 2)
 
-# Safety thresholds (degrees F) used to color the UI and raise alerts.
-TEMP_WARN_F = _get_int("TEMP_WARN_F", 375)
-TEMP_CRIT_F = _get_int("TEMP_CRIT_F", 425)
+# Temperature guardrails (degrees F). The safe band is [LOW, HIGH]; a zone at or
+# beyond either bound is CRITICAL and raises a warning email. These same bounds
+# drive the UI coloring so the dashboard matches the email alerts.
+TEMP_EMAIL_HIGH_F = _get_int("TEMP_EMAIL_HIGH_F", 450)
+TEMP_EMAIL_LOW_F = _get_int("TEMP_EMAIL_LOW_F", 300)
+# UI warns this many degrees before a critical bound (e.g. 425 / 325). UI-only.
+# Set to 0 to drop the warn tier entirely (OK jumps straight to CRITICAL).
+TEMP_WARN_MARGIN_F = _get_int("TEMP_WARN_MARGIN_F", 0)
 
 # --- Reset (via LOGO!) -----------------------------------------------------
 # The Pi sets a network input / marker coil on the LOGO!; the LOGO! program

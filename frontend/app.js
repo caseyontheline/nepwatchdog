@@ -94,13 +94,69 @@ function renderCameras(cameras) {
     tile.className = "cam";
     tile.dataset.cam = cam.id;
     const aiBadge = appConfig.vision_enabled ? '<div class="cam-ai">AI</div>' : "";
-    tile.innerHTML = `<video autoplay muted playsinline></video>
-                      <div class="cam-overlay"></div>
+    tile.innerHTML = `<div class="cam-zoom">
+                        <video autoplay muted playsinline></video>
+                        <div class="cam-overlay"></div>
+                      </div>
                       ${aiBadge}
+                      <div class="cam-controls">
+                        <button class="cam-btn" data-act="zoom-out" title="Zoom out">–</button>
+                        <button class="cam-btn" data-act="zoom-in" title="Zoom in">+</button>
+                        <button class="cam-btn" data-act="fullscreen" title="Fullscreen">⛶</button>
+                      </div>
                       <div class="label">${cam.name}</div>`;
     container.appendChild(tile);
+    wireCamControls(tile);
     startWhep(tile.querySelector("video"), cam, tile);
   }
+}
+
+// Per-tile zoom (scale on .cam-zoom, so detection overlay stays aligned) + pan
+// via drag, plus fullscreen via the Fullscreen API.
+function wireCamControls(tile) {
+  const zoom = tile.querySelector(".cam-zoom");
+  const state = { scale: 1, x: 0, y: 0 };
+  const MIN = 1, MAX = 5;
+
+  function apply() {
+    state.scale = Math.min(MAX, Math.max(MIN, state.scale));
+    if (state.scale === 1) { state.x = 0; state.y = 0; }
+    zoom.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+    tile.classList.toggle("zoomed", state.scale > 1);
+  }
+  function zoomBy(factor) { state.scale *= factor; apply(); }
+
+  tile.querySelector('[data-act="zoom-in"]').onclick = () => zoomBy(1.4);
+  tile.querySelector('[data-act="zoom-out"]').onclick = () => zoomBy(1 / 1.4);
+  tile.querySelector('[data-act="fullscreen"]').onclick = () => {
+    if (document.fullscreenElement === tile) document.exitFullscreen();
+    else tile.requestFullscreen?.();
+  };
+
+  // Wheel to zoom toward the cursor.
+  zoom.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+  }, { passive: false });
+
+  // Drag to pan when zoomed in.
+  let drag = null;
+  zoom.addEventListener("pointerdown", (e) => {
+    if (state.scale === 1) return;
+    drag = { px: e.clientX, py: e.clientY };
+    zoom.setPointerCapture(e.pointerId);
+  });
+  zoom.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    state.x += e.clientX - drag.px;
+    state.y += e.clientY - drag.py;
+    drag.px = e.clientX; drag.py = e.clientY;
+    apply();
+  });
+  zoom.addEventListener("pointerup", (e) => {
+    drag = null;
+    zoom.releasePointerCapture?.(e.pointerId);
+  });
 }
 
 // YOLO detection overlay. Boxes arrive in normalized coords, so we place them
@@ -218,9 +274,9 @@ function drawChart(data) {
     tMin = Math.min(tMin, p.ts); tMax = Math.max(tMax, p.ts);
     yMin = Math.min(yMin, p.temp_f); yMax = Math.max(yMax, p.temp_f);
   }
-  const warn = data.thresholds.warn_f, crit = data.thresholds.crit_f;
-  yMax = Math.max(yMax, crit) + 8;
-  yMin = Math.min(yMin, warn) - 8;
+  const th = data.thresholds;
+  yMax = Math.max(yMax, th.crit_high_f) + 8;
+  yMin = Math.min(yMin, th.crit_low_f) - 8;
   if (tMax === tMin) tMax = tMin + 1;
 
   const px = (t) => m.l + ((t - tMin) / (tMax - tMin)) * (W - m.l - m.r);
@@ -240,8 +296,17 @@ function drawChart(data) {
     const x = px(t);
     svg.push(`<text class="chart-axis-label" x="${x}" y="${H - 8}" text-anchor="middle">${fmtTime(t)}</text>`);
   }
-  // Threshold reference lines
-  for (const [v, color, label] of [[warn, "#d98324", "WARN"], [crit, "#e0433f", "CRIT"]]) {
+  // Threshold reference lines — two-sided (low + high warn/crit bounds)
+  const threshLines = [
+    [th.crit_high_f, "#e0433f", "CRIT"],
+    [th.warn_high_f, "#d98324", "WARN"],
+    [th.warn_low_f, "#d98324", "WARN"],
+    [th.crit_low_f, "#e0433f", "CRIT"],
+  ];
+  for (const [v, color, label] of threshLines) {
+    if (v == null) continue;
+    // Skip a WARN line that coincides with a CRIT bound (zero warn margin).
+    if (label === "WARN" && (v === th.crit_high_f || v === th.crit_low_f)) continue;
     const y = py(v);
     svg.push(`<line class="chart-thresh" x1="${m.l}" y1="${y}" x2="${W - m.r}" y2="${y}" stroke="${color}"/>`);
     svg.push(`<text class="chart-thresh-label" x="${W - m.r + 4}" y="${y + 3}" fill="${color}">${label}</text>`);
@@ -335,7 +400,7 @@ const DEMO_CONFIG = {
   hardware_mode: "mock",
   vision_enabled: true,
   weather_enabled: true,
-  thresholds: { warn_f: 375, crit_f: 425 },
+  thresholds: { warn_low_f: 300, warn_high_f: 450, crit_low_f: 300, crit_high_f: 450 },
   cameras: [
     { id: "cam-1", name: "Burner", webrtc: "" },
     { id: "cam-2", name: "Tank", webrtc: "" },
@@ -350,7 +415,11 @@ const ZONE_META = [
 function demoReadings(t) {
   return ZONE_META.map((z, i) => {
     const temp = 400 + 9 * Math.sin(t / 12 + i * 2) + (Math.random() - 0.5) * 3;
-    const status = temp >= 425 ? "critical" : temp >= 375 ? "warn" : "ok";
+    const th = DEMO_CONFIG.thresholds;
+    const status =
+      temp >= th.crit_high_f || temp <= th.crit_low_f ? "critical"
+      : temp >= th.warn_high_f || temp <= th.warn_low_f ? "warn"
+      : "ok";
     return { controller_id: z.id, name: z.name, temp_f: temp, setpoint_f: 400, online: true, status };
   });
 }

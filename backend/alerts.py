@@ -22,9 +22,20 @@ _RANK = {"ok": 0, "warn": 1, "critical": 2, "offline": 3}
 
 
 class AlertEngine:
-    def __init__(self, on_alert: Callable[[dict], None]):
+    def __init__(
+        self,
+        on_alert: Callable[[dict], None],
+        high_f: Optional[float] = None,
+        low_f: Optional[float] = None,
+    ):
         self._on_alert = on_alert
         self._prev_status: Dict[str, str] = {}
+        # Absolute temperature guardrails for email alerts, independent of the
+        # UI warn/crit coloring. A zone above high_f or below low_f is "out of
+        # band" and raises a warning (edge-triggered, so no per-poll spam).
+        self._high_f = high_f
+        self._low_f = low_f
+        self._prev_band: Dict[str, str] = {}
 
     def evaluate(self, controllers: List[dict]) -> List[dict]:
         """Diff current statuses against the last poll; emit edge alerts."""
@@ -35,13 +46,37 @@ class AlertEngine:
             cur = c["status"]  # ok | warn | critical | offline
             prev = self._prev_status.get(zone)
             self._prev_status[zone] = cur
-            if prev is None or prev == cur:
-                continue
-            alert = self._make(zone, name, prev, cur, c.get("temp_f"))
-            if alert:
-                out.append(alert)
-                self._on_alert(alert)
+            if prev is not None and prev != cur:
+                alert = self._make(zone, name, prev, cur, c.get("temp_f"))
+                if alert:
+                    out.append(alert)
+                    self._on_alert(alert)
+            band_alert = self._check_band(zone, name, c.get("status"), c.get("temp_f"))
+            if band_alert:
+                out.append(band_alert)
+                self._on_alert(band_alert)
         return out
+
+    def _check_band(self, zone, name, status, temp) -> Optional[dict]:
+        """Edge-triggered high/low temperature guardrail for email alerts."""
+        if status == "offline" or temp is None:
+            return None  # handled by the offline path; don't trip bands on stale data
+        if self._high_f is not None and temp >= self._high_f:
+            band = "high"
+        elif self._low_f is not None and temp <= self._low_f:
+            band = "low"
+        else:
+            band = "normal"
+        prev = self._prev_band.get(zone, "normal")
+        self._prev_band[zone] = band
+        if band == prev:
+            return None
+        now = time.time()
+        if band == "high":
+            return _a(now, zone, "warning", "temp_high", f"{name} rose above {self._high_f:.0f}°F ({temp:.0f}°F)")
+        if band == "low":
+            return _a(now, zone, "warning", "temp_low", f"{name} dropped below {self._low_f:.0f}°F ({temp:.0f}°F)")
+        return _a(now, zone, "info", "temp_band_ok", f"{name} back within range ({temp:.0f}°F)")
 
     def _make(self, zone, name, prev, cur, temp) -> Optional[dict]:
         now = time.time()
