@@ -4,6 +4,12 @@ Web dashboard for monitoring a Heatec asphalt heater: two temperature zones,
 three camera feeds, a weather readout, and a **Reset Heater** button. Runs on
 a Raspberry Pi 5 on-site, and anywhere in **mock mode** for development.
 
+The static page prefers **FastAPI** when available (`/api/config`, `/ws`,
+`/api/reset`, history, alerts). Otherwise it polls plant **Node-RED**
+(`GET /temp` and aliases, `POST /reset`). Synthetic **demo** mode runs only
+when nothing answers. For live plant data from nepwatchdog.com, set a tunnel
+URL and open with `?api=` (or host the API on this domain).
+
 ## Hardware topology
 
 ```

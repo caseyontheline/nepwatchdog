@@ -70,9 +70,12 @@ header h1 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
+  border: 1px solid transparent;
 }
-.link-up { background: rgba(31,157,85,0.2); color: #4ade80; }
-.link-down { background: rgba(224,67,63,0.2); color: #ff7b76; }
+.link-up { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.35); }
+.link-nodered { background: rgba(96,165,250,0.15); color: #93c5fd; border-color: rgba(96,165,250,0.4); }
+.link-demo { background: rgba(161,161,170,0.18); color: #a1a1aa; border-color: rgba(161,161,170,0.35); }
+.link-down { background: rgba(224,67,63,0.15); color: #ff7b76; border-color: rgba(224,67,63,0.35); }
 
 main { padding: 28px; max-width: 1200px; margin: 0 auto; }
 .grid { display: grid; gap: 20px; margin-bottom: 24px; }
